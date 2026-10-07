@@ -225,6 +225,9 @@
       <label class="control">주택 유형
         <select id="housing"></select>
       </label>
+      <label class="control">면적
+        <select id="size"></select>
+      </label>
     </div>
 
     <div class="layout">
@@ -251,7 +254,7 @@
     </div>
 
     <div class="notes">
-      <p><b>평균 월세</b>는 2024년에 계약한 서울 월세(보증금만 있는 전세 제외) 약 28만 건의 월 임대료 평균이에요. 보증금이 큰 계약은 월세가 낮게 잡히는 경우가 많아서, 자세히 보기에는 중앙값과 평균 보증금도 같이 보여 드려요.</p>
+      <p><b>평균 월세</b>는 2024년에 계약한 서울 월세(보증금만 있는 전세 제외) 약 28만 건의 월 임대료 평균이에요. 크기와 주택 종류를 가리지 않은 값이라 큰 아파트도 섞여 있어요. 원룸 수준만 보려면 면적을 <b>10평 이하</b>(임대면적 33㎡ 이하, 약 14만 건)로 바꿔 보세요. 보증금이 큰 계약은 월세가 낮게 잡히는 경우가 많아서, 자세히 보기에는 중앙값과 평균 보증금도 같이 보여 드려요.</p>
       <p><b>범죄율</b>은 발생 건수를 주민등록 인구로 나누고 10만을 곱한 값이에요. 중구·종로구·강남구처럼 낮에 출근하거나 놀러 오는 사람이 많은 동네는 사는 사람에 비해 사건이 많아서 범죄율이 높게 나와요. 그러니 "위험한 동네"라는 뜻으로 읽지는 말아 주세요.</p>
       <p id="fetched" hidden></p>
       <p>출처: <a href="https://www.data.go.kr/data/3074462/fileData.do" target="_blank" rel="noopener">경찰청_범죄 발생 지역별 통계 (2024, 공공데이터포털 API)</a> · <a href="https://jumin.mois.go.kr/" target="_blank" rel="noopener">행정안전부 주민등록 인구통계 (2024년 12월 말)</a> · <a href="https://data.seoul.go.kr/dataList/OA-21276/S/1/datasetView.do" target="_blank" rel="noopener">서울시 부동산 전월세가 정보 (2024)</a> · 경계: <a href="https://github.com/southkorea/seoul-maps" target="_blank" rel="noopener">southkorea/seoul-maps</a></p>
@@ -267,7 +270,7 @@
     };
     const ALL = "전체";
 
-    const state = { view: "crime", category: ALL, metric: "rate", housing: ALL, selected: null };
+    const state = { view: "crime", category: ALL, metric: "rate", housing: ALL, size: ALL, selected: null };
     let data, rent, layer, map, breaks = [];
     const layersByName = {};
 
@@ -291,7 +294,10 @@
     }
 
     const crimeRate = gu => countOf(gu) / data.districts[gu].population * 1e5;
-    const rentOf = (gu, type = state.housing) => rent.districts[gu][type];
+    const rentOf = (gu, type = state.housing) => rent.districts[gu][state.size][type];
+    // 예: "10평 이하 오피스텔", "전체 주택"
+    const rentLabel = () => [state.size === ALL ? "" : state.size, state.housing === ALL ? "전체 주택" : state.housing]
+      .filter(Boolean).join(" ");
 
     function valueOf(gu) {
       if (state.view === "rent") return rentOf(gu).avg;
@@ -304,7 +310,7 @@
     }
 
     function valueLabel() {
-      if (state.view === "rent") return `${state.housing === ALL ? "전체 주택" : state.housing} · 평균 월세`;
+      if (state.view === "rent") return `${rentLabel()} · 평균 월세`;
       return `${state.category} · ${state.metric === "rate" ? "인구 10만 명당 건수" : "발생 건수"}`;
     }
 
@@ -391,8 +397,8 @@
       // 범죄 지도면 범죄 세부 유형, 월세 지도면 주택 유형별 평균 월세를 나눠 보여줌
       let parts;
       if (state.view === "rent") {
-        parts = rent.types.filter(t => t !== ALL && rent.districts[gu][t])
-          .map(t => [t, rent.districts[gu][t].avg, fmtWon(rent.districts[gu][t].avg)]);
+        parts = rent.types.filter(t => t !== ALL && rentOf(gu, t))
+          .map(t => [t, rentOf(gu, t).avg, fmtWon(rentOf(gu, t).avg)]);
       } else if (state.category === ALL) {
         const groups = [...new Set(data.categories.map(c => c[0]))];
         parts = groups.map(g => { const v = countOf(gu, g); return [g, v, `${fmt(v)}건`]; });
@@ -409,7 +415,7 @@
         </div>
         <p style="font-size:12px;color:var(--text-muted)">주민등록 인구 ${fmt(d.population)}명</p>
         <div class="detail-sec">
-          <h3>${state.housing === ALL ? "월세" : state.housing + " 월세"} (2024년 계약 ${fmt(r.n)}건)</h3>
+          <h3>${rentLabel()} 월세 (2024년 계약 ${fmt(r.n)}건)</h3>
           <div class="stats">
             <div class="stat"><small>평균 월세</small><b>${fmtWon(r.avg)}</b></div>
             <div class="stat"><small>중앙값</small><b>${fmtWon(r.median)}</b></div>
@@ -451,7 +457,7 @@
 
       const strength = Math.abs(r) < 0.3 ? "거의 관계가 없어요" : Math.abs(r) < 0.6 ? "약간 관계가 있어요" : "꽤 관계가 있어요";
       document.getElementById("scatter-sub").textContent =
-        `가로: ${state.housing === ALL ? "전체 주택" : state.housing} 평균 월세 · 세로: ${state.category} 인구 10만 명당 발생 · 상관계수 r = ${r.toFixed(2)} (${strength})`;
+        `가로: ${rentLabel()} 평균 월세 · 세로: ${state.category} 인구 10만 명당 발생 · 상관계수 r = ${r.toFixed(2)} (${strength})`;
 
       const xt = niceTicks(x0, x1, W < 500 ? 4 : 6), yt = niceTicks(y0, y1);
       // 아래쪽은 점이 몰려 있어서, 선택한 구와 범죄율·월세 상위 구에만 이름을 붙임
@@ -516,6 +522,10 @@
       const housing = document.getElementById("housing");
       housing.innerHTML = rent.types.map(t => `<option value="${t}">${t === ALL ? "전체 주택" : t}</option>`).join("");
       housing.addEventListener("change", () => { state.housing = housing.value; render(); });
+
+      const size = document.getElementById("size");
+      size.innerHTML = rent.sizes.map(t => `<option value="${t}">${t === ALL ? "전체 크기" : t + " (33㎡)"}</option>`).join("");
+      size.addEventListener("change", () => { state.size = size.value; render(); });
 
       bindSeg("view-seg", "view");
       bindSeg("metric-seg", "metric");

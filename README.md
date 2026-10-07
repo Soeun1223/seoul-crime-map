@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 범죄 발생 건수 | [경찰청_범죄 발생 지역별 통계 (2024)](https://www.data.go.kr/data/3074462/fileData.do) | 공공데이터포털 **API** (`scripts/fetch_crime.py`) |
 | 자치구 인구 | [행정안전부 주민등록 인구통계](https://jumin.mois.go.kr/) 2024년 12월 말 | `data/seoul-population-2024.json`에 저장 |
-| 평균 월세 | [서울시 부동산 전월세가 정보 (2024)](https://data.seoul.go.kr/dataList/OA-21276/S/1/datasetView.do) | 2024년 월세 계약 약 28만 건을 구별로 요약 |
+| 평균 월세 | [서울시 부동산 전월세가 정보 (2024)](https://data.seoul.go.kr/dataList/OA-21276/S/1/datasetView.do) | 파일 다운로드 후 `scripts/build_rent.py`로 2024년 월세 계약 약 28만 건을 구별로 요약 (전체 / 10평=33.06㎡ 이하) |
 | 자치구 경계 | [southkorea/seoul-maps](https://github.com/southkorea/seoul-maps) | GeoJSON |
 
 범죄율은 `발생 건수 ÷ 주민등록 인구 × 100,000`(인구 10만 명당)입니다.
@@ -44,7 +44,8 @@ python3 -m http.server 8000
 | `index.html` | 지도 페이지 (Leaflet) |
 | `data/seoul-crime-2024.json` | 범죄 통계 (API로 갱신) |
 | `data/seoul-population-2024.json` | 범죄율 계산용 인구 |
-| `data/seoul-rent-2024.json` | 자치구·주택 유형별 월세 요약 |
+| `data/seoul-rent-2024.json` | 자치구·면적·주택 유형별 월세 요약 |
+| `scripts/build_rent.py` | 전월세가 CSV로 월세 요약 JSON을 만드는 스크립트 |
 | `data/seoul-gu.geojson` | 서울 자치구 경계 |
 | `scripts/fetch_crime.py` | 공공데이터포털 API 호출 스크립트 |
 | `.github/workflows/update-crime-data.yml` | 매달 API를 불러 데이터를 갱신하는 자동 작업 |
