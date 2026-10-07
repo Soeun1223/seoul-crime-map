@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>서울 범죄·월세 지도</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%97%BA%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --bg-page: #e8eff3;
+      --note-paper: #ffffff;
+      --note-border: #dbe4ea;
+      --text-main: #2b303a;
+      --text-sub: #57606f;
+      --text-muted: #8c97a8;
+      --primary: #4a90e2;
+      --radius-inner: 16px;
+      --radius-sm: 8px;
+      /* 5단계 순차 색상 (낮음 → 높음) */
+      --c0: #fdeee4;
+      --c1: #f9c5a8;
+      --c2: #f2936b;
+      --c3: #dc5a3c;
+      --c4: #a8281f;
+      /* 월세용 5단계 */
+      --r0: #e8f1fa;
+      --r1: #b7d3ee;
+      --r2: #7eb0de;
+      --r3: #4a86c5;
+      --r4: #255a9c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 32px 16px 48px;
+    }
+
+    .wrap { max-width: 1100px; margin: 0 auto; }
+
+    .back {
+      display: inline-block;
+      color: var(--text-sub);
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .back:hover { color: var(--primary); }
+
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+    .lead { color: var(--text-sub); margin-top: 6px; font-size: 15px; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: center;
+      margin: 20px 0 16px;
+    }
+    .control { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-sub); }
+    select {
+      font: inherit;
+      color: var(--text-main);
+      padding: 8px 12px;
+      border: 1px solid var(--note-border);
+      border-radius: var(--radius-sm);
+      background: var(--note-paper);
+    }
+    .seg { display: inline-flex; background: var(--note-paper); border: 1px solid var(--note-border); border-radius: var(--radius-sm); padding: 3px; }
+    .seg button {
+      font: inherit;
+      font-size: 14px;
+      border: 0;
+      background: transparent;
+      color: var(--text-sub);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .seg button[aria-pressed="true"] { background: var(--text-main); color: #fff; }
+    select:focus-visible, .seg button:focus-visible, .rank button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 16px;
+    }
+    .card {
+      background: var(--note-paper);
+      border: 1px solid var(--note-border);
+      border-radius: var(--radius-inner);
+      overflow: hidden;
+    }
+
+    #map { height: 560px; background: #f4f7f9; }
+    .leaflet-container { font-family: inherit; }
+    .gu-tip { font-size: 13px; line-height: 1.4; }
+    .gu-label { pointer-events: none; }
+    .gu-label span {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #2b303a;
+      white-space: nowrap;
+      transform: translate(-50%, -50%);
+      text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+    }
+    .gu-tip b { font-size: 14px; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--note-border);
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+    .legend .sw { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+    .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.08); }
+
+    .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .panel { padding: 16px; }
+    .panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+
+    .rank { list-style: none; max-height: 330px; overflow-y: auto; }
+    .rank button {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 22px 64px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      color: var(--text-main);
+      padding: 4px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .rank button:hover, .rank button.on { background: #f1f5f8; }
+    .rank .n { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .rank .bar { height: 8px; border-radius: 4px; background: var(--c3); }
+    .rank .v { font-variant-numeric: tabular-nums; color: var(--text-sub); }
+
+    .detail-empty { color: var(--text-muted); font-size: 14px; }
+    .detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .detail-head strong { font-size: 18px; }
+    .detail-head span { color: var(--text-sub); font-size: 13px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+    .stat { background: #f4f7f9; border-radius: var(--radius-sm); padding: 8px 10px; }
+    .stat small { display: block; color: var(--text-muted); font-size: 12px; }
+    .stat b { font-size: 17px; font-variant-numeric: tabular-nums; }
+    .breakdown { list-style: none; font-size: 13px; }
+    .breakdown li { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--note-border); }
+    .breakdown li:last-child { border-bottom: 0; }
+    .breakdown span:last-child { font-variant-numeric: tabular-nums; color: var(--text-sub); }
+
+    .control[hidden] { display: none; }
+    .detail-sec { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--note-border); }
+    .detail-sec h3 { font-size: 13px; color: var(--text-sub); font-weight: 600; }
+    .detail-sec .stats { margin-top: 8px; }
+
+    .scatter-card { margin-top: 16px; }
+    .scatter-sub { font-size: 13px; color: var(--text-sub); margin: -4px 0 8px; }
+    #scatter svg { display: block; margin: 0 auto; max-width: 100%; height: auto; overflow: visible; }
+    #scatter .axis { stroke: var(--note-border); }
+    #scatter .tick { font-size: 11px; fill: var(--text-muted); }
+    #scatter .axis-title { font-size: 12px; fill: var(--text-sub); }
+    #scatter .dot { cursor: pointer; stroke: rgba(43, 48, 58, .35); stroke-width: 1; }
+    #scatter .dot.on { stroke: var(--text-main); stroke-width: 2.5; }
+    #scatter .dot-label { font-size: 11px; fill: var(--text-main); pointer-events: none; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+    #scatter .trend { stroke: var(--text-muted); stroke-dasharray: 4 4; }
+
+    .notes { margin-top: 20px; font-size: 13px; color: var(--text-sub); }
+    .notes p + p { margin-top: 6px; }
+    .notes a { color: var(--primary); }
+
+    .error { padding: 24px; color: #b3261e; }
+
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      #map { height: 440px; }
+    }
+    @media (max-width: 480px) {
+      body { padding-top: 20px; }
+      h1 { font-size: 22px; }
+      #map { height: auto; aspect-ratio: 1.15; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>서울 자치구별 범죄 · 월세 지도 (2024)</h1>
+    <p class="lead">경찰청 범죄 발생 통계와 서울시 월세 계약을 25개 자치구별로 색칠했어요. 진할수록 많거나 비싼 곳이에요.</p>
+
+    <div class="controls">
+      <div class="control">지도
+        <div class="seg" role="group" aria-label="지도에 표시할 값" id="view-seg">
+          <button type="button" data-view="crime" aria-pressed="true">범죄</button>
+          <button type="button" data-view="rent" aria-pressed="false">평균 월세</button>
+        </div>
+      </div>
+      <label class="control" data-for="crime">범죄 유형
+        <select id="category"></select>
+      </label>
+      <div class="control" data-for="crime">기준
+        <div class="seg" role="group" aria-label="범죄 기준" id="metric-seg">
+          <button type="button" data-metric="rate" aria-pressed="true">인구 10만 명당</button>
+          <button type="button" data-metric="count" aria-pressed="false">발생 건수</button>
+        </div>
+      </div>
+      <label class="control">주택 유형
+        <select id="housing"></select>
+      </label>
+    </div>
+
+    <div class="layout">
+      <div class="card">
+        <div id="map" role="region" aria-label="서울 자치구 범죄·월세 지도"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+
+      <div class="side">
+        <div class="card panel" id="detail" aria-live="polite">
+          <p class="detail-empty">지도나 순위에서 구를 누르면 자세한 내용이 나와요.</p>
+        </div>
+        <div class="card panel">
+          <h2 id="rank-title">순위</h2>
+          <ol class="rank" id="rank"></ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="card panel scatter-card">
+      <h2>월세가 비싼 동네는 범죄율도 높을까?</h2>
+      <p class="scatter-sub" id="scatter-sub"></p>
+      <div id="scatter"></div>
+    </div>
+
+    <div class="notes">
+      <p><b>평균 월세</b>는 2024년에 계약한 서울 월세(보증금만 있는 전세 제외) 약 28만 건의 월 임대료 평균이에요. 보증금이 큰 계약은 월세가 낮게 잡히는 경우가 많아서, 자세히 보기에는 중앙값과 평균 보증금도 같이 보여 드려요.</p>
+      <p><b>범죄율</b>은 발생 건수를 주민등록 인구로 나누고 10만을 곱한 값이에요. 중구·종로구·강남구처럼 낮에 출근하거나 놀러 오는 사람이 많은 동네는 사는 사람에 비해 사건이 많아서 범죄율이 높게 나와요. 그러니 "위험한 동네"라는 뜻으로 읽지는 말아 주세요.</p>
+      <p id="fetched" hidden></p>
+      <p>출처: <a href="https://www.data.go.kr/data/3074462/fileData.do" target="_blank" rel="noopener">경찰청_범죄 발생 지역별 통계 (2024, 공공데이터포털 API)</a> · <a href="https://jumin.mois.go.kr/" target="_blank" rel="noopener">행정안전부 주민등록 인구통계 (2024년 12월 말)</a> · <a href="https://data.seoul.go.kr/dataList/OA-21276/S/1/datasetView.do" target="_blank" rel="noopener">서울시 부동산 전월세가 정보 (2024)</a> · 경계: <a href="https://github.com/southkorea/seoul-maps" target="_blank" rel="noopener">southkorea/seoul-maps</a></p>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const PALETTES = {
+      crime: ["--c0", "--c1", "--c2", "--c3", "--c4"].map(cssVar),
+      rent: ["--r0", "--r1", "--r2", "--r3", "--r4"].map(cssVar),
+    };
+    const ALL = "전체";
+
+    const state = { view: "crime", category: ALL, metric: "rate", housing: ALL, selected: null };
+    let data, rent, layer, map, breaks = [];
+    const layersByName = {};
+
+    const fmt = n => n.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
+    const fmtRate = n => n.toLocaleString("ko-KR", { maximumFractionDigits: n < 10 ? 1 : 0 });
+    const fmtWon = man => `${fmt(man)}만 원`;
+    // 보증금처럼 큰 금액은 억 단위로
+    const fmtBig = man => man >= 10000 ? `${(man / 10000).toFixed(1)}억 원` : fmtWon(man);
+
+    // 선택한 대분류에 해당하는 행 인덱스
+    function rowsFor(category) {
+      return data.categories
+        .map((c, i) => [c, i])
+        .filter(([c]) => category === ALL || c[0] === category)
+        .map(([, i]) => i);
+    }
+
+    function countOf(gu, category = state.category) {
+      const counts = data.districts[gu].counts;
+      return rowsFor(category).reduce((sum, i) => sum + counts[i], 0);
+    }
+
+    const crimeRate = gu => countOf(gu) / data.districts[gu].population * 1e5;
+    const rentOf = (gu, type = state.housing) => rent.districts[gu][type];
+
+    function valueOf(gu) {
+      if (state.view === "rent") return rentOf(gu).avg;
+      return state.metric === "rate" ? crimeRate(gu) : countOf(gu);
+    }
+
+    function formatValue(v) {
+      if (state.view === "rent") return fmtWon(v);
+      return state.metric === "rate" ? fmtRate(v) : fmt(v);
+    }
+
+    function valueLabel() {
+      if (state.view === "rent") return `${state.housing === ALL ? "전체 주택" : state.housing} · 평균 월세`;
+      return `${state.category} · ${state.metric === "rate" ? "인구 10만 명당 건수" : "발생 건수"}`;
+    }
+
+    const tooltipValue = gu => state.view === "rent" || state.metric === "count"
+      ? formatValue(valueOf(gu)) + (state.view === "crime" ? "건" : "")
+      : `10만 명당 ${formatValue(valueOf(gu))}건`;
+
+    // 25개 구를 다섯 그룹(5개씩)으로 나누는 분위수 경계
+    function computeBreaks(values) {
+      const sorted = [...values].sort((a, b) => a - b);
+      return [1, 2, 3, 4].map(k => sorted[Math.round(k * sorted.length / 5) - 1]);
+    }
+
+    function colorFor(v) {
+      let i = 0;
+      while (i < breaks.length && v > breaks[i]) i++;
+      return PALETTES[state.view][i];
+    }
+
+    function styleFor(feature) {
+      const gu = feature.properties.name;
+      const on = gu === state.selected;
+      return {
+        fillColor: colorFor(valueOf(gu)),
+        fillOpacity: 0.85,
+        color: on ? "#2b303a" : "#ffffff",
+        weight: on ? 3 : 1.2,
+      };
+    }
+
+    function render() {
+      const names = Object.keys(data.districts);
+      breaks = computeBreaks(names.map(valueOf));
+      document.querySelectorAll('[data-for="crime"]').forEach(el => el.hidden = state.view !== "crime");
+      layer.setStyle(styleFor);
+      layer.eachLayer(l => {
+        const gu = l.feature.properties.name;
+        l.setTooltipContent(`<div class="gu-tip"><b>${gu}</b><br>${tooltipValue(gu)}</div>`);
+      });
+      if (state.selected) layersByName[state.selected].bringToFront();
+      renderLegend(names);
+      renderRank(names);
+      renderDetail(names);
+      renderScatter(names);
+    }
+
+    function renderLegend(names) {
+      const values = names.map(valueOf);
+      const edges = [Math.min(...values), ...breaks, Math.max(...values)];
+      document.getElementById("legend").innerHTML =
+        `<span>${valueLabel()}</span>` +
+        PALETTES[state.view].map((c, i) =>
+          `<span class="sw"><i style="background:${c}"></i>${formatValue(edges[i])}–${formatValue(edges[i + 1])}</span>`
+        ).join("");
+    }
+
+    const ranked = names => [...names].sort((a, b) => valueOf(b) - valueOf(a));
+
+    function renderRank(names) {
+      const sorted = ranked(names);
+      const max = valueOf(sorted[0]) || 1;
+      document.getElementById("rank-title").textContent = `순위 · ${valueLabel()}`;
+      document.getElementById("rank").innerHTML = sorted.map((gu, i) => {
+        const v = valueOf(gu);
+        return `<li><button type="button" data-gu="${gu}" class="${gu === state.selected ? "on" : ""}">
+          <span class="n">${i + 1}</span><span>${gu}</span>
+          <span class="bar" style="width:${Math.max(2, v / max * 100)}%;background:${colorFor(v)}"></span>
+          <span class="v">${formatValue(v)}</span></button></li>`;
+      }).join("");
+    }
+
+    function renderDetail(names) {
+      const el = document.getElementById("detail");
+      const gu = state.selected;
+      if (!gu) {
+        el.innerHTML = `<p class="detail-empty">지도나 순위에서 구를 누르면 자세한 내용이 나와요.</p>`;
+        return;
+      }
+      const d = data.districts[gu];
+      const r = rentOf(gu);
+      const rank = ranked(names).indexOf(gu) + 1;
+      const n = countOf(gu);
+
+      // 범죄 지도면 범죄 세부 유형, 월세 지도면 주택 유형별 평균 월세를 나눠 보여줌
+      let parts;
+      if (state.view === "rent") {
+        parts = rent.types.filter(t => t !== ALL && rent.districts[gu][t])
+          .map(t => [t, rent.districts[gu][t].avg, fmtWon(rent.districts[gu][t].avg)]);
+      } else if (state.category === ALL) {
+        const groups = [...new Set(data.categories.map(c => c[0]))];
+        parts = groups.map(g => { const v = countOf(gu, g); return [g, v, `${fmt(v)}건`]; });
+      } else {
+        parts = rowsFor(state.category).map(i => [data.categories[i][1], d.counts[i], `${fmt(d.counts[i])}건`]);
+      }
+      parts = parts.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+
+      el.innerHTML = `
+        <div class="detail-head"><strong>${gu}</strong><span>${valueLabel()} · ${rank}위</span></div>
+        <div class="stats">
+          <div class="stat"><small>${state.category} 발생</small><b>${fmt(n)}건</b></div>
+          <div class="stat"><small>인구 10만 명당</small><b>${fmtRate(n / d.population * 1e5)}</b></div>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted)">주민등록 인구 ${fmt(d.population)}명</p>
+        <div class="detail-sec">
+          <h3>${state.housing === ALL ? "월세" : state.housing + " 월세"} (2024년 계약 ${fmt(r.n)}건)</h3>
+          <div class="stats">
+            <div class="stat"><small>평균 월세</small><b>${fmtWon(r.avg)}</b></div>
+            <div class="stat"><small>중앙값</small><b>${fmtWon(r.median)}</b></div>
+            <div class="stat"><small>평균 보증금</small><b>${fmtBig(r.deposit)}</b></div>
+          </div>
+        </div>
+        ${parts.length > 1 ? `<ul class="breakdown">${parts.map(([k, , label]) =>
+          `<li><span>${k}</span><span>${label}</span></li>`).join("")}</ul>` : ""}`;
+    }
+
+    // 피어슨 상관계수
+    function pearson(xs, ys) {
+      const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+      let sxy = 0, sxx = 0, syy = 0;
+      xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+      return { r: sxy / Math.sqrt(sxx * syy), slope: sxy / sxx, mx, my };
+    }
+
+    function niceTicks(lo, hi, count = 5) {
+      const step = 10 ** Math.floor(Math.log10((hi - lo) / count));
+      const mult = [1, 2, 5, 10].find(m => (hi - lo) / (step * m) <= count);
+      const s = step * mult;
+      const ticks = [];
+      for (let t = Math.ceil(lo / s) * s; t <= hi; t += s) ticks.push(t);
+      return ticks;
+    }
+
+    function renderScatter(names) {
+      // 화면 폭에 맞춰 그려서 휴대폰에서도 글자가 작아지지 않게
+      const W = Math.max(300, Math.min(820, document.getElementById("scatter").clientWidth));
+      const H = W < 500 ? 300 : 360, m = { t: 12, r: 16, b: 44, l: 56 };
+      const xs = names.map(gu => rentOf(gu).avg), ys = names.map(crimeRate);
+      const pad = (lo, hi) => [lo - (hi - lo) * 0.06, hi + (hi - lo) * 0.06];
+      const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
+      const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
+      const X = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+      const Y = v => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+      const { r, slope, mx, my } = pearson(xs, ys);
+
+      const strength = Math.abs(r) < 0.3 ? "거의 관계가 없어요" : Math.abs(r) < 0.6 ? "약간 관계가 있어요" : "꽤 관계가 있어요";
+      document.getElementById("scatter-sub").textContent =
+        `가로: ${state.housing === ALL ? "전체 주택" : state.housing} 평균 월세 · 세로: ${state.category} 인구 10만 명당 발생 · 상관계수 r = ${r.toFixed(2)} (${strength})`;
+
+      const xt = niceTicks(x0, x1, W < 500 ? 4 : 6), yt = niceTicks(y0, y1);
+      // 아래쪽은 점이 몰려 있어서, 선택한 구와 범죄율·월세 상위 구에만 이름을 붙임
+      const byRate = [...names].sort((a, b) => crimeRate(b) - crimeRate(a));
+      const byRent = [...names].sort((a, b) => rentOf(b).avg - rentOf(a).avg);
+      const labelled = new Set([byRate[0], byRate[1], byRent[0], byRent[1], state.selected]);
+
+      document.getElementById("scatter").innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="자치구별 평균 월세와 범죄율 산점도">
+          ${xt.map(t => `<line class="axis" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${H - m.b}" stroke-opacity=".6"/>
+            <text class="tick" x="${X(t)}" y="${H - m.b + 16}" text-anchor="middle">${fmt(t)}</text>`).join("")}
+          ${yt.map(t => `<line class="axis" x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke-opacity=".6"/>
+            <text class="tick" x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end">${fmt(t)}</text>`).join("")}
+          <line class="trend" x1="${X(x0)}" y1="${Y(my + slope * (x0 - mx))}" x2="${X(x1)}" y2="${Y(my + slope * (x1 - mx))}"/>
+          <text class="axis-title" x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle">평균 월세 (만 원)</text>
+          <text class="axis-title" transform="translate(14 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle">10만 명당 범죄</text>
+          ${names.map((gu, i) => `
+            <circle class="dot ${gu === state.selected ? "on" : ""}" data-gu="${gu}" cx="${X(xs[i])}" cy="${Y(ys[i])}" r="${gu === state.selected ? 8 : 6}"
+              fill="${colorFor(valueOf(gu))}">
+              <title>${gu} · 월세 ${fmtWon(xs[i])} · 10만 명당 ${fmtRate(ys[i])}건</title></circle>
+            ${labelled.has(gu) ? `<text class="dot-label" x="${X(xs[i]) + 10}" y="${Y(ys[i]) + 4}">${gu}</text>` : ""}`).join("")}
+        </svg>`;
+    }
+
+    function select(gu) {
+      state.selected = state.selected === gu ? null : gu;
+      render();
+      if (state.selected) {
+        const target = document.querySelector(`.rank button[data-gu="${gu}"]`);
+        if (target) target.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function bindSeg(id, key) {
+      const buttons = document.querySelectorAll(`#${id} button`);
+      buttons.forEach(btn => btn.addEventListener("click", () => {
+        state[key] = btn.dataset[key];
+        buttons.forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+        render();
+      }));
+    }
+
+    async function init() {
+      const [crime, rentData, geo] = await Promise.all([
+        fetch("./data/seoul-crime-2024.json", { cache: "no-cache" }).then(r => r.json()),
+        fetch("./data/seoul-rent-2024.json", { cache: "no-cache" }).then(r => r.json()),
+        fetch("./data/seoul-gu.geojson").then(r => r.json()),
+      ]);
+      data = crime;
+      rent = rentData;
+      if (data.fetchedAt) {
+        const el = document.getElementById("fetched");
+        el.textContent = `범죄 데이터는 공공데이터포털 API에서 ${data.fetchedAt}에 받아 왔어요.`;
+        el.hidden = false;
+      }
+
+      const sel = document.getElementById("category");
+      const groups = [ALL, ...new Set(data.categories.map(c => c[0]))];
+      sel.innerHTML = groups.map(g => `<option value="${g}">${g === ALL ? "전체 범죄" : g}</option>`).join("");
+      sel.addEventListener("change", () => { state.category = sel.value; render(); });
+
+      const housing = document.getElementById("housing");
+      housing.innerHTML = rent.types.map(t => `<option value="${t}">${t === ALL ? "전체 주택" : t}</option>`).join("");
+      housing.addEventListener("change", () => { state.housing = housing.value; render(); });
+
+      bindSeg("view-seg", "view");
+      bindSeg("metric-seg", "metric");
+
+      document.getElementById("rank").addEventListener("click", e => {
+        const btn = e.target.closest("button[data-gu]");
+        if (btn) select(btn.dataset.gu);
+      });
+      document.getElementById("scatter").addEventListener("click", e => {
+        const dot = e.target.closest("[data-gu]");
+        if (dot) select(dot.dataset.gu);
+      });
+
+      map = L.map("map", { scrollWheelZoom: false, zoomSnap: 0.25, minZoom: 9, maxZoom: 14, attributionControl: false });
+      layer = L.geoJSON(geo, {
+        style: styleFor,
+        onEachFeature: (feature, l) => {
+          const gu = feature.properties.name;
+          layersByName[gu] = l;
+          l.bindTooltip("", { sticky: true, direction: "top", opacity: 0.95 });
+          // 구 이름 라벨 (polylabel 대신 경계 상자 중심 사용)
+          L.marker(l.getBounds().getCenter(), {
+            interactive: false,
+            keyboard: false,
+            icon: L.divIcon({ className: "gu-label", html: `<span>${gu}</span>`, iconSize: null }),
+          }).addTo(map);
+          l.on({
+            click: () => select(gu),
+            mouseover: () => l.setStyle({ weight: 3, color: "#2b303a" }),
+            mouseout: () => layer.resetStyle(l),
+          });
+        },
+      }).addTo(map);
+      // 처음 그릴 때 컨테이너 크기가 0일 수 있어서, 크기가 바뀔 때마다 다시 맞춤
+      const fit = () => { map.invalidateSize(); map.fitBounds(layer.getBounds(), { padding: [8, 8] }); };
+      new ResizeObserver(fit).observe(document.getElementById("map"));
+      let lastW = 0;
+      new ResizeObserver(([e]) => {
+        if (Math.round(e.contentRect.width) === lastW) return;
+        lastW = Math.round(e.contentRect.width);
+        renderScatter(Object.keys(data.districts));
+      }).observe(document.getElementById("scatter"));
+      fit();
+
+      render();
+    }
+
+    init().catch(err => {
+      console.error(err);
+      document.getElementById("map").innerHTML =
+        `<p class="error">데이터를 불러오지 못했어요. 로컬에서는 <code>python3 -m http.server 8000</code>으로 열어 주세요.</p>`;
+    });
+  </script>
+</body>
+</html>
