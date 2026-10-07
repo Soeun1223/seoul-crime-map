@@ -269,6 +269,7 @@
       rent: ["--r0", "--r1", "--r2", "--r3", "--r4"].map(cssVar),
     };
     const ALL = "전체";
+    const RENT_VERSION = 2; // data/seoul-rent-2024.json의 version과 같아야 함
 
     const state = { view: "crime", category: ALL, metric: "rate", housing: ALL, size: ALL, selected: null };
     let data, rent, layer, map, breaks = [];
@@ -506,6 +507,16 @@
         fetch("./data/seoul-rent-2024.json", { cache: "no-cache" }).then(r => r.json()),
         fetch("./data/seoul-gu.geojson").then(r => r.json()),
       ]);
+      // 브라우저에 예전 페이지가 남아 새 데이터와 안 맞으면, 캐시를 피해서 한 번만 다시 불러옴
+      if (rentData.version !== RENT_VERSION) {
+        const url = new URL(location.href);
+        if (!url.searchParams.has("v")) {
+          url.searchParams.set("v", Date.now());
+          location.replace(url);
+          return;
+        }
+        throw new Error(`월세 데이터 버전 ${rentData.version} ≠ 페이지 ${RENT_VERSION}`);
+      }
       data = crime;
       rent = rentData;
       if (data.fetchedAt) {
@@ -576,7 +587,9 @@
     init().catch(err => {
       console.error(err);
       document.getElementById("map").innerHTML =
-        `<p class="error">데이터를 불러오지 못했어요. 로컬에서는 <code>python3 -m http.server 8000</code>으로 열어 주세요.</p>`;
+        location.protocol === "file:"
+          ? `<p class="error">데이터를 불러오지 못했어요. 파일을 바로 열지 말고 <code>python3 -m http.server 8000</code>으로 열어 주세요.</p>`
+          : `<p class="error">데이터를 불러오지 못했어요. 새로고침(Mac은 Cmd+Shift+R)해 주세요.</p>`;
     });
   </script>
 </body>

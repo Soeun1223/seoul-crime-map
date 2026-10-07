@@ -20,6 +20,7 @@ TYPES = ["아파트", "오피스텔", "연립다세대", "단독다가구"]
 SMALL = "10평 이하"
 SMALL_MAX_M2 = 33.06  # 10평 = 33.0579㎡
 SIZES = ["전체", SMALL]
+RENT_VERSION = 2
 
 OUTPUT_FILE = Path(__file__).resolve().parent.parent / "data" / f"seoul-rent-{YEAR}.json"
 
@@ -58,6 +59,8 @@ def main():
                 groups[gu][size][t].append((rent, deposit))
 
     out = {
+        # 데이터 구조가 바뀌면 올리고, index.html의 RENT_VERSION도 같이 올린다
+        "version": RENT_VERSION,
         "source": f"서울시 부동산 전월세가 정보 {YEAR} (서울 열린데이터광장 OA-21276)",
         "note": f"{YEAR}년 계약 중 월세(임대료 0원 초과)만, 단위 만원. {SMALL}는 임대면적 {SMALL_MAX_M2}㎡ 이하",
         "sizes": SIZES,
